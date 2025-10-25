@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GPS Avanzado v3.0 Pro RD</title>
+
+<!-- Leaflet + Routing -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+<!-- Firebase compat -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+  :root{
+    --panel-w:360px;
+    --bg:#0e0e0f;
+    --panel:#151515;
+    --accent:#1e88e5;
+    --muted:#8f98a0;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,Arial,system-ui;background:var(--bg);color:#e6eef3}
+  #map{position:absolute;top:0;bottom:0;left:var(--panel-w);right:0;z-index:0}
+  #panel{
+    position: absolute; left:0; top:0; bottom:0; width:var(--panel-w); padding:14px;
+    background:var(--panel); box-shadow:2px 0 10px rgba(0,0,0,.6); z-index:1200; overflow:auto;
+  }
+  .row{display:flex;gap:8px;align-items:center}
+  h2{margin:0 0 8px 0;font-size:18px}
+  button{display:inline-block;padding:8px 10px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+  button.ghost{background:#222}
+  button.warn{background:#d9534f}
+  input[type="text"], select{width:100%;padding:8px;border-radius:8px;border:1px solid #222;background:#0b0b0c;color:#fff}
+  #flotaList,#historial{background:#0b0b0c;border-radius:8px;padding:8px;margin-top:8px;max-height:180px;overflow:auto}
+  .flotaItem{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #1a1a1a;cursor:pointer}
+  .suggestions{background:#0b0b0c;border-radius:6px;overflow:auto;max-height:140px;margin-top:6px;display:none}
+  .suggItem{padding:6px;cursor:pointer;border-bottom:1px solid #111}
+  .suggItem:hover{background:#1a1a1a}
+  #statusBar{
+    position:absolute;left:var(--panel-w);right:0;bottom:0;height:40px;background:#071013;color:#dff;display:flex;align-items:center;gap:12px;padding:0 16px;z-index:1300;border-top:1px solid #222;font-family:monospace
+  }
+  #statusMovimiento.en{color:#0f0;font-weight:700}
+  #statusMovimiento.stopped{color:#ff6b6b;font-weight:700}
+  .small{font-size:13px;color:var(--muted)}
+  .alert{
+    position:absolute;top:10px;right:10px;background:#1e88e5;color:#fff;padding:10px 14px;border-radius:8px;z-index:2000;opacity:0.95;transition:opacity 0.5s;
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div style="display:flex;gap:8px;align-items:center">
+      <h2 style="margin-left:6px">GPS Pro RD v3.0</h2>
+    </div>
+  </div>
+
+  <div>
+    <div style="margin:10px 0 6px 0">
+      <button id="btnUbicacion">📡 Enviar ubicación</button>
+      <button id="btnRuta" class="ghost">🗺️ Ver rutas (selección)</button>
+      <button id="btnGeocercas" class="ghost">📍 Geocercas</button>
+      <button id="btnAgregarPunto" class="ghost">➕ Agregar establecimiento</button>
+    </div>
+
+    <h3>Agregar nueva flota</h3>
+    <input id="newFlotaName" type="text" placeholder="Nombre del camión">
+    <input id="newFlotaPlate" type="text" placeholder="Placa">
+    <div class="row" style="margin-top:6px">
+      <button id="btnAgregarFlota">➕ Agregar</button>
+      <button id="btnBorrarRutas" class="warn">🗑 Rutas</button>
+    </div>
+
+    <h3>Buscar flota</h3>
+    <input id="inputBuscar" type="text" placeholder="Escribe nombre...">
+    <div id="sugerencias" class="suggestions"></div>
+    <div class="row" style="margin-top:6px">
+      <button id="btnBuscar" class="ghost">🔎 Buscar</button>
+    </div>
+
+    <h3>Filtrar por Geocerca</h3>
+    <select id="selectGeocerca"></select>
+
+    <h3>Flotas registradas</h3>
+    <div id="flotaList"></div>
+
+    <h3>Historial</h3>
+    <div id="historial" class="small"></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="statusBar">
+  🚛 Flota seleccionada: <span id="statusFlota">Ninguna</span> |
+  Última: <span id="statusTiempo">-</span> |
+  Estado: <span id="statusMovimiento" class="small">-</span>
+</div>
+
+<div id="alertContainer"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBNDvalpKia91Sx8LpOf9KYRwrLmYKjjx8",
+  authDomain: "system-gps-ccn.firebaseapp.com",
+  databaseURL: "https://system-gps-ccn-default-rtdb.firebaseio.com",
+  projectId: "system-gps-ccn",
+  storageBucket: "system-gps-ccn.firebasestorage.app",
+  messagingSenderId: "185831936889",
+  appId: "1:185831936889:web:0c93c4b0816085d6a215a8",
+  measurementId: "G-16V31HNJ37"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ----- MAPA -----
+const map = L.map('map',{editable:true}).setView([18.7357,-70.1627],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+const baseTruckIconUrl='https://cdn-icons-png.flaticon.com/512/1995/1995574.png';
+const FLEET_COLORS = ['#2196F3','#4CAF50','#E53935','#FF9800','#9C27B0','#00BCD4','#FFEB3B','#795548'];
+function colorForFlotaId(id){let h=0;for(let i=0;i<id.length;i++) h=(h<<5)-h+id.charCodeAt(i);return FLEET_COLORS[Math.abs(h)%FLEET_COLORS.length];}
+
+// ----- ESTABLECIMIENTOS -----
+const establecimientos=[
+  { tipo:"Supermercado", nombre:"La Sirena - Sambil Santo Domingo", lat:18.4684, lon:-69.9219 },
+  { tipo:"Supermercado", nombre:"La Sirena - Ágora Mall", lat:18.4471, lon:-69.9876 },
+  { tipo:"Supermercado", nombre:"Plaza Lama - Santo Domingo", lat:18.4815, lon:-69.9227 },
+  { tipo:"Supermercado", nombre:"Supermercado Nacional - Santo Domingo", lat:18.4737, lon:-69.9156 },
+  { tipo:"Supermercado", nombre:"Olé Supermercados - Santo Domingo", lat:18.4690, lon:-69.9662 },
+  { tipo:"Supermercado", nombre:"Supermercados Bravo - Santiago", lat:19.4513, lon:-70.6956 },
+  { tipo:"Supermercado", nombre:"Hipermercado Nacional - Santiago", lat:19.4424, lon:-70.6946 },
+  { tipo:"Almacén", nombre:"Almacenes García - Santo Domingo", lat:18.4861, lon:-69.9312 },
+  { tipo:"Almacén", nombre:"Centro de Distribución - Santo Domingo", lat:18.4710, lon:-69.9089 },
+  { tipo:"Supermercado", nombre:"La Sirena - Santiago", lat:19.4540, lon:-70.6995 },
+  { tipo:"Supermercado", nombre:"Olé - Santiago", lat:19.4250, lon:-70.7170 }
+];
+establecimientos.forEach(e=>{
+  L.circleMarker([e.lat,e.lon],{radius:7,color:e.tipo==="Almacén"?"#1bbf50":"#2196f3",fillColor:e.tipo==="Almacén"?"#1bbf50":"#2196f3",fillOpacity:0.9})
+    .addTo(map).bindPopup(`<b>${e.tipo}</b><br>${e.nombre}`);
+});
+
+// ----- VARIABLES -----
+let geocercas=[], geocercasVisible=false;
+let flotas=[], markers=[], rutas={};
+let ultimaUbicacion=null;
+let totalDistancia=0;
+let tiempoEnMovimiento=0, tiempoDetenido=0;
+const elFlotaList=document.getElementById('flotaList');
+const elHistorial=document.getElementById('historial');
+const elSugerencias=document.getElementById('sugerencias');
+const elInputBuscar=document.getElementById('inputBuscar');
+const statusFlota=document.getElementById('statusFlota');
+const statusTiempo=document.getElementById('statusTiempo');
+const statusMovimiento=document.getElementById('statusMovimiento');
+const elSelectGeocerca=document.getElementById('selectGeocerca');
+const alertContainer=document.getElementById('alertContainer');
+
+function showAlert(msg){
+  const el=document.createElement('div'); el.className='alert'; el.textContent=msg;
+  alertContainer.appendChild(el);
+  setTimeout(()=>el.style.opacity='0',3500);
+  setTimeout(()=>alertContainer.removeChild(el),4000);
+}
+
+// ----- FLotas -----
+function seedIfEmpty(){
+  db.ref('flotas').once('value', snap=>{
+    if(!snap.exists()){
+      db.ref('flotas/1').set({id:'1',name:'Camión A',plate:'AAA111'});
+      db.ref('flotas/2').set({id:'2',name:'Camión B',plate:'BBB222'});
+    }
+  });
+}
+seedIfEmpty();
+
+db.ref('flotas').on('value', snap=>{ flotas=Object.values(snap.val()||{}); renderFlotas(); buildSuggestions(); filterFlotasByGeocerca(); });
+db.ref('positions').on('value', snap=>{ const positions=snap.val()||{}; renderHistorial(positions); checkGeocercaEvents(positions); });
+
+// ----- RENDER FLotas -----
+function renderFlotas(){
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  flotas.forEach((f,i)=>{
+    db.ref('positions').orderByChild('flotaId').equalTo(f.id).limitToLast(1).once('value', snap=>{
+      let pos=[18.504221,-69.937821], speed=0;
+      snap.forEach(s=>{ const v=s.val(); pos=[v.lat,v.lon]; speed=v.speed||0; });
+      const color=colorForFlotaId(f.id);
+      const icon=L.divIcon({html:`<div style="width:32px;height:32px;border-radius:6px;background:${color};display:flex;justify-content:center;align-items:center;border:2px solid #000"><img src="${baseTruckIconUrl}" style="width:20px;height:20px;filter:invert(1)"/></div>`,className:'',iconSize:[34,34],iconAnchor:[17,34]});
+      const marker=L.marker(pos,{icon,draggable:false}).addTo(map); marker.flotaId=f.id; marker.flotaName=f.name; marker.speed=speed; marker.color=color;
+      marker.bindPopup(`<b>${f.name}</b><br>${f.plate}`); markers.push(marker); habilitarMenuContextual(marker,f);
+    });
+  });
+}
+
+// ----- HISTORIAL -----
+function renderHistorial(positions){
+  elHistorial.innerHTML=''; Object.values(rutas).forEach(r=>map.removeLayer(r)); rutas={};
+  const arr=Object.values(positions||{}); arr.sort((a,b)=>(a.ts||0)-(b.ts||0));
+  arr.forEach(p=>{
+    const el=document.createElement('div'); el.className='small'; el.style.cursor='pointer';
+    el.textContent=`${new Date(p.ts).toLocaleString()} - ${p.name||'Desconocido'}: ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+    el.onclick=()=>{ map.setView([p.lat,p.lon],15); L.popup().setLatLng([p.lat,p.lon]).setContent(`<b>Historial</b><br>${p.name||''}`).openOn(map); };
+    elHistorial.prepend(el);
+    if(!rutas[p.flotaId]) rutas[p.flotaId]=L.polyline([[p.lat,p.lon]],{color:colorForFlotaId(p.flotaId),weight:4}).addTo(map);
+    else rutas[p.flotaId].addLatLng([p.lat,p.lon]);
+  });
+}
+
+// ----- ALERTAS DE GEOCERCAS -----
+function toggleGeocercas(){
+  if(geocercasVisible){ geocercas.forEach(g=>map.removeLayer(g.circle)); geocercas=[]; geocercasVisible=false; elSelectGeocerca.innerHTML='<option value="all">Todas</option>'; filterFlotasByGeocerca(); return; }
+  geocercas=establecimientos.map(e=>{ const c=L.circle([e.lat,e.lon],{radius:350,color:e.tipo==="Almacén"?"#1bbf50":"#2196f3",fillOpacity:0.06}).addTo(map); c.bindPopup(`<b>${e.nombre}</b><br>${e.tipo}`); return {circle:c,meta:e,inside:{}}; });
+  geocercasVisible=true;
+  elSelectGeocerca.innerHTML='<option value="all">Todas</option>';
+  geocercas.forEach((g,i)=>{ const opt=document.createElement('option'); opt.value=i; opt.textContent=g.meta.nombre; elSelectGeocerca.appendChild(opt); });
+  filterFlotasByGeocerca();
+}
+document.getElementById('btnGeocercas').addEventListener('click', toggleGeocercas);
+
+function checkGeocercaEvents(positions){
+  const arr=Object.values(positions||{});
+  arr.forEach(p=>{
+    geocercas.forEach(g=>{
+      const d=map.distance([p.lat,p.lon], g.circle.getLatLng()); const inside=d<=g.circle.getRadius();
+      if(!g.inside) g.inside={};
+      const prev=g.inside[p.flotaId];
+      g.inside[p.flotaId]=inside;
+      if(inside && !prev){ g.circle.setStyle({fillOpacity:0.18}); showAlert(`${p.name||'Desconocido'} entró a ${g.meta.nombre}`); setTimeout(()=>g.circle.setStyle({fillOpacity:0.06}),1500); }
+      if(!inside && prev){ g.circle.setStyle({fillOpacity:0.18}); showAlert(`${p.name||'Desconocido'} salió de ${g.meta.nombre}`); setTimeout(()=>g.circle.setStyle({fillOpacity:0.06}),1500); }
+    });
+  });
+  filterFlotasByGeocerca();
+}
+
+// ----- FILTROS -----
+function filterFlotasByGeocerca(){
+  const val=elSelectGeocerca.value;
+  elFlotaList.innerHTML='';
+  flotas.forEach(f=>{
+    let mostrar=true;
+    if(val!=='all'){ const g=geocercas[val]; if(!g.inside[f.id]) mostrar=false; }
+    if(mostrar){
+      const row=document.createElement('div'); row.className='flotaItem';
+      row.innerHTML=`<div><strong>${f.name}</strong><div class="small">${f.plate}</div></div><div><button onclick="firebase.database().ref('flotas/${f.id}').remove()">🗑</button></div>`;
+      row.onclick=()=>{ const m=markers.find(m=>m.flotaId===f.id); if(m) map.setView(m.getLatLng(),14); };
+      elFlotaList.appendChild(row);
+    }
+  });
+}
+elSelectGeocerca.addEventListener('change', filterFlotasByGeocerca);
+
+// ----- MENU CONTEXTUAL -----
+function habilitarMenuContextual(marker,flota){
+  marker.on('click', ()=>{ statusFlota.textContent=flota.name; statusTiempo.textContent=new Date().toLocaleTimeString(); statusMovimiento.textContent=marker.speed>0?'en movimiento':'detenido'; statusMovimiento.className=marker.speed>0?'en':'stopped'; });
+}
+
+// ----- SUGERENCIAS -----
+function buildSuggestions(){
+  elSugerencias.innerHTML='';
+  flotas.forEach(f=>{ const el=document.createElement('div'); el.className='suggItem'; el.textContent=f.name; el.onclick=()=>{ elInputBuscar.value=f.name; elSugerencias.style.display='none'; filterFlotasByGeocerca(); }; elSugerencias.appendChild(el); });
+}
+
+elInputBuscar.addEventListener('input', ()=>{
+  const val=elInputBuscar.value.toLowerCase(); if(!val){ elSugerencias.style.display='none'; filterFlotasByGeocerca(); return; }
+  const items=Array.from(elSugerencias.children); items.forEach(i=>i.style.display=i.textContent.toLowerCase().includes(val)?'block':'none'); elSugerencias.style.display='block';
+});
+
+document.getElementById('btnBuscar').addEventListener('click', ()=>{ const val=elInputBuscar.value.toLowerCase(); const f=flotas.find(f=>f.name.toLowerCase()===val); if(f){ const m=markers.find(m=>m.flotaId===f.id); if(m) map.setView(m.getLatLng(),14); } });
+
+// ----- AGREGAR FLOTA -----
+document.getElementById('btnAgregarFlota').addEventListener('click', ()=>{
+  const n=document.getElementById('newFlotaName').value,t=document.getElementById('newFlotaPlate').value;
+  if(!n||!t) return alert('Completa los campos');
+  const id=Date.now().toString(); db.ref(`flotas/${id}`).set({id,name:n,plate:t});
+  document.getElementById('newFlotaName').value=''; document.getElementById('newFlotaPlate').value='';
+});
+
+// ----- RUTAS -----
+let puntoInicio=null, puntoFin=null, rutaActual=null, seleccionandoRuta=false;
+document.getElementById('btnRuta').addEventListener('click', ()=>{ seleccionandoRuta=!seleccionandoRuta; showAlert(seleccionandoRuta?'Modo selección ruta ON':'Modo selección ruta OFF'); });
+map.on('click', e=>{ 
+  if(!seleccionandoRuta) return; 
+  if(!puntoInicio){ puntoInicio=e.latlng; L.marker(puntoInicio).addTo(map).bindPopup('Inicio').openPopup(); return; } 
+  if(!puntoFin){ puntoFin=e.latlng; L.marker(puntoFin).addTo(map).bindPopup('Destino').openPopup(); } 
+  seleccionandoRuta=false; 
+  if(rutaActual) map.removeControl(rutaActual); 
+  rutaActual=L.Routing.control({waypoints:[puntoInicio,puntoFin],lineOptions:{styles:[{color:'#1e88e5',weight:5}]},language:'es',addWaypoints:false}).addTo(map); 
+  rutaActual.on('routesfound', e=>{ const r=e.routes[0]; showAlert(`Tiempo estimado: ${Math.round(r.summary.totalTime/60)} min — Distancia: ${(r.summary.totalDistance/1000).toFixed(2)} km`); }); 
+  puntoInicio=null; puntoFin=null; 
+});
+document.getElementById('btnBorrarRutas').addEventListener('click', ()=>{ Object.values(rutas).forEach(r=>map.removeLayer(r)); rutas={}; if(rutaActual){ map.removeControl(rutaActual); rutaActual=null; } showAlert('Rutas del historial y ruta actual eliminadas.'); });
+
+// ----- AGREGAR ESTABLECIMIENTO MANUAL -----
+document.getElementById('btnAgregarPunto').addEventListener('click', ()=>{
+  const nombre=prompt("Nombre del establecimiento:");
+  if(!nombre) return;
+  const lat=parseFloat(prompt("Latitud:"));
+  const lon=parseFloat(prompt("Longitud:"));
+  if(isNaN(lat)||isNaN(lon)) return alert("Coordenadas inválidas");
+  establecimientos.push({tipo:"Personal",nombre,lat,lon});
+  L.marker([lat,lon]).addTo(map).bindPopup(`<b>${nombre}</b>`).openPopup();
+  showAlert(`Establecimiento "${nombre}" agregado`);
+});
+
+// ----- RASTREO AUTOMÁTICO DEL TELÉFONO -----
+const MY_PHONE_ID = "miTelefono";
+const phoneIcon = L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/684/684908.png',iconSize:[32,32],iconAnchor:[16,16]});
+let markerPhone = null;
+
+function trackPhone(){
+  if(!navigator.geolocation) return showAlert("Geolocalización no soportada");
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude, lon=pos.coords.longitude;
+    const speed = pos.coords.speed||0;
+    const ts = Date.now();
+    const dateKey = new Date(ts).toISOString().slice(0,10);
+
+    // DISTANCIA
+    let distance = 0;
+    if(ultimaUbicacion) distance = map.distance([lat,lon],[ultimaUbicacion.lat,ultimaUbicacion.lon]);
+    totalDistancia += distance;
+
+    // TIEMPO
+    if(speed>0) tiempoEnMovimiento+=10; else tiempoDetenido+=10;
+
+    ultimaUbicacion={lat,lon,speed,ts};
+
+    // Guardar en Firebase
+    db.ref(`users/${MY_PHONE_ID}/${dateKey}/${ts}`).set({lat,lon,speed,distance,totalDistancia,tiempoEnMovimiento,tiempoDetenido,ts});
+
+    // Mostrar en mapa
+    if(!markerPhone){
+      markerPhone=L.marker([lat,lon],{icon:phoneIcon}).addTo(map).bindPopup("Tu teléfono");
+      map.setView([lat,lon],14);
+    } else markerPhone.setLatLng([lat,lon]);
+
+    statusFlota.textContent="Mi Teléfono";
+    statusTiempo.textContent=new Date(ts).toLocaleTimeString();
+    statusMovimiento.textContent=speed>0?"en movimiento":"detenido";
+    statusMovimiento.className=speed>0?'en':'stopped';
+
+  }, err=>showAlert("Error obteniendo ubicación: "+err.message));
+}
+
+// RASTREO AUTOMÁTICO CADA 10 SEGUNDOS
+setInterval(trackPhone,10000);
+trackPhone();
+</script>
+</body>
+</html>
