@@ -1,0 +1,16 @@
+{
+  "name": "Sistema GPS CCN",
+  "short_name": "GPS CCN",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f0f",
+  "theme_color": "#00bfa5",
+  "description": "Sistema de rastreo GPS en tiempo real conectado a Firebase",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1995/1995574.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
