@@ -1,736 +1,224 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Sistema GPS - CCN</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sistema GPS CCN</title>
 
-<!-- Leaflet + Routing -->
+<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 
-<!-- Firebase compat -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js"></script>
+
+<!-- Manifest -->
+<link rel="manifest" href="manifest.json" />
 
 <style>
-:root{
-  --panel-w:360px;
-  --bg:#0f1720;
-  --panel:#0b1220;
-  --accent:#1477d8;
-  --muted:#9aa5b1;
-  --glass: rgba(255,255,255,0.03);
-}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:Inter,Arial,system-ui;background:var(--bg);color:#e6eef3}
-#map{position:absolute;top:0;bottom:0;left:var(--panel-w);right:0;z-index:0}
-#panel{position:absolute;left:0;top:0;bottom:0;width:var(--panel-w);padding:14px;background:var(--panel);box-shadow:4px 0 30px rgba(0,0,0,.6);z-index:1200;overflow:auto;transition:transform .22s ease}
-.panel-hidden{transform:translateX(-100%)}
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.row{display:flex;gap:8px;align-items:center}
-h1{margin:0;font-size:18px}
-button{display:inline-block;padding:8px 10px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
-button.ghost{background:#0f1726}
-button.warn{background:#d9534f}
-input[type="text"], input[type="password"], select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:#fff}
-#flotaList,#historial{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:8px;padding:8px;margin-top:8px;max-height:240px;overflow:auto}
-.flotaItem{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer}
-.small{font-size:13px;color:var(--muted)}
-.alert{position:fixed;top:12px;right:12px;background:linear-gradient(180deg,var(--accent),#0f63b2);color:#fff;padding:10px 14px;border-radius:8px;z-index:2000;opacity:0.98;box-shadow:0 8px 30px rgba(0,0,0,.45)}
-
-/* login modal */
-#loginModal{position:fixed;inset:0;background:rgba(2,6,23,0.75);display:flex;align-items:center;justify-content:center;z-index:5000}
-#loginBox{width:340px;background:#071022;padding:20px;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);color:#e6eef3}
-#loginBox h2{margin:0 0 8px 0;text-align:center}
-#loginBox .row{margin-top:8px;justify-content:center}
-#loginError{color:#ff7b7b;text-align:center;display:none}
-
-/* place modal */
-#placeModal{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:none;align-items:center;justify-content:center;z-index:6000}
-#placeBox{width:340px;background:#071022;padding:16px;border-radius:10px;color:#e6eef3;box-shadow:0 8px 30px rgba(0,0,0,.6)}
-#placeBox h3{margin:0 0 8px 0}
-
-/* mini map inside history */
-.mini-map{width:140px;height:88px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);overflow:hidden}
-
-/* responsive */
-@media (max-width:900px){
-  :root{--panel-w:320px}
-  #panel{position:fixed;left:0;top:0;bottom:0;z-index:1400;transform:translateX(-100%)}
-  #panel.open{transform:translateX(0)}
-  #map{left:0}
-  #statusBar{left:0}
-  .menu-toggle{display:inline-flex}
-}
-.menu-toggle{display:none;background:transparent;border:0;color:#fff;font-size:20px;cursor:pointer}
-.badge{background:#132635;padding:4px 8px;border-radius:6px;font-size:12px}
-.legend{display:flex;gap:6px;align-items:center;margin-top:8px}
-.legend span{display:inline-block;width:12px;height:12px;border-radius:3px}
+body,html { margin:0; padding:0; height:100%; background:#0f0f0f; color:#fff; font-family:Arial, sans-serif; }
+#map { height:100%; width:100%; }
+.panel { position:absolute; top:0; left:0; background:#151515; width:320px; height:100%; overflow:auto; padding:15px; box-shadow:2px 0 10px rgba(0,0,0,0.6); z-index:1000; transition:transform .3s ease; }
+.panel.hidden { transform:translateX(-100%); }
+.panel h2 { margin-top:0; color:#00bfa5; }
+.btn { display:block; background:#00bfa5; color:#fff; border:none; padding:8px 10px; margin:6px 0; width:100%; cursor:pointer; border-radius:6px; font-weight:bold; }
+.btn:hover { background:#00d8b2; }
+#togglePanel { position:absolute; top:10px; left:10px; z-index:1100; background:#00bfa5; border:none; color:#fff; padding:8px 10px; border-radius:5px; cursor:pointer; }
+#toast { position:fixed; bottom:25px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:10px 20px; border-radius:6px; opacity:0; transition:opacity .4s; z-index:2000; }
+#toast.show { opacity:1; }
+.historial-container { margin-top:15px; }
+.mini-map { width:100%; height:120px; margin:6px 0; border:1px solid #333; border-radius:8px; }
+.mini-map-info { font-size:12px; color:#ccc; margin-bottom:10px; }
+@media(max-width:768px){ .panel{width:85%;} }
 </style>
 </head>
+
 <body>
-
-<!-- LOGIN MODAL -->
-<div id="loginModal">
-  <div id="loginBox">
-    <h2>Iniciar sesión</h2>
-    <input id="loginUser" type="text" placeholder="Usuario">
-    <input id="loginPass" type="password" placeholder="Contraseña">
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button id="btnLogin">Entrar</button>
-      <button id="btnLoginGuest" class="ghost">Entrar demo</button>
-      <button id="btnOpenPanelMobile" class="menu-toggle" style="margin-left:auto;display:none">☰</button>
-    </div>
-    <div id="loginError">Usuario o contraseña incorrectos</div>
-  </div>
-</div>
-
-<!-- PLACE MODAL -->
-<div id="placeModal">
-  <div id="placeBox">
-    <h3 id="placeTitle">Agregar establecimiento</h3>
-    <input id="placeInputName" type="text" placeholder="Nombre">
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="placeSave">Guardar</button>
-      <button id="placeCancel" class="ghost">Cancelar</button>
-      <button id="placeAsFlota" class="ghost" title="Agregar como flota">Agregar como flota</button>
-    </div>
-    <div class="small" style="margin-top:8px;color:var(--muted)">Click en el mapa para seleccionar ubicación antes de abrir este modal.</div>
-  </div>
-</div>
+<button id="togglePanel">☰</button>
 
 <!-- PANEL -->
-<div id="panel" class="">
-  <div class="header">
-    <h1>Panel de control</h1>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button id="btnFollow" class="ghost" title="Seguir ubicación">📍</button>
-      <button id="btnPanelToggle" class="menu-toggle">✕</button>
-    </div>
-  </div>
-
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-    <button id="btnUbicacion">📡 Enviar ubicación</button>
-    <button id="btnRuta" class="ghost">🗺️ Ver rutas</button>
-    <button id="btnGeocercas" class="ghost">📍 Geocercas</button>
-    <button id="btnAgregarPunto" class="ghost">➕ Agregar</button>
-  </div>
-
-  <div style="margin-top:8px">
-    <div class="small">Buscar</div>
-    <input id="inputBuscar" placeholder="Nombre de flota o establecimiento...">
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button id="btnBuscar" class="ghost">🔎</button>
-      <select id="selectFlota" style="flex:1"><option value="">Todas las flotas</option></select>
-    </div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-      <div class="small">Filtrar historial</div>
-      <div class="small"><input id="dateFilter" type="date"></div>
-    </div>
-    <select id="histFilter" style="width:100%;margin-top:6px"><option value="all">Todas</option></select>
-
-    <h3 style="margin-top:12px" class="small">Flotas</h3>
-    <div id="flotaList"></div>
-
-    <h3 style="margin-top:12px" class="small">Historial</h3>
-    <div id="historial" class="small"></div>
-  </div>
+<div class="panel hidden" id="sidePanel">
+  <h2>Panel de Control</h2>
+  <button class="btn" id="btnAgregarEst">Agregar Establecimiento</button>
+  <button class="btn" id="btnVerRutas">Ver Rutas</button>
+  <button class="btn" id="btnHistorial">Historial</button>
+  <button class="btn" id="btnEliminarRecorrido">Eliminar Recorrido del Mapa</button>
+  <button class="btn" id="btnStartTracking">Activar Seguimiento GPS</button>
+  <div class="historial-container" id="historialContainer"></div>
 </div>
 
-<!-- MAP -->
-<div id="map" style="display:none"></div>
-
-<!-- status bar -->
-<div id="statusBar" style="display:none">
-  🚛 Flota seleccionada: <span id="statusFlota">Ninguna</span> |
-  Última: <span id="statusTiempo">-</span> |
-  Estado: <span id="statusMovimiento" class="small">-</span>
-</div>
-
-<div id="toasts"></div>
+<!-- MAPA -->
+<div id="map"></div>
+<div id="toast"></div>
 
 <script>
-/* ===========================
-   FIREBASE CONFIG - use your provided project
-   =========================== */
+/* -----------------------------
+   CONFIGURACIÓN FIREBASE
+----------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyBNDvalpKia91Sx8LpOf9KYRwrLmYKjjx8",
   authDomain: "system-gps-ccn.firebaseapp.com",
   databaseURL: "https://system-gps-ccn-default-rtdb.firebaseio.com",
   projectId: "system-gps-ccn",
-  storageBucket: "system-gps-ccn.firebasestorage.app",
-  messagingSenderId: "185831936889",
-  appId: "1:185831936889:web:0c93c4b0816085d6a215a8",
-  measurementId: "G-16V31HNJ37"
+  storageBucket: "system-gps-ccn.appspot.com",
+  messagingSenderId: "490798984373",
+  appId: "1:490798984373:web:fc9e47dc8ddac1a79fdc16"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.getDatabase(app);
 
-/* ===========================
-   ELEMENT REFERENCES
-   ===========================*/
-const loginModal = document.getElementById('loginModal');
-const btnLogin = document.getElementById('btnLogin');
-const btnLoginGuest = document.getElementById('btnLoginGuest');
-const loginUser = document.getElementById('loginUser');
-const loginPass = document.getElementById('loginPass');
-const loginError = document.getElementById('loginError');
+/* -----------------------------
+   MAPA
+----------------------------- */
+const map = L.map('map').setView([18.7357, -70.1627], 8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-const placeModal = document.getElementById('placeModal');
-const placeTitle = document.getElementById('placeTitle');
-const placeInputName = document.getElementById('placeInputName');
-const placeSave = document.getElementById('placeSave');
-const placeCancel = document.getElementById('placeCancel');
-const placeAsFlota = document.getElementById('placeAsFlota');
+let estMarkers = {};
+let rutasActivas = [];
 
-const panel = document.getElementById('panel');
-const mapDiv = document.getElementById('map');
-const toastContainer = document.getElementById('toasts');
+/* -----------------------------
+   TOAST
+----------------------------- */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 3000);
+}
 
-const btnAgregarPunto = document.getElementById('btnAgregarPunto');
-const btnUbicacion = document.getElementById('btnUbicacion');
-const btnRuta = document.getElementById('btnRuta');
-const btnGeocercas = document.getElementById('btnGeocercas');
-const btnBuscar = document.getElementById('btnBuscar');
-const inputBuscar = document.getElementById('inputBuscar');
-const flotaList = document.getElementById('flotaList');
-const selectFlota = document.getElementById('selectFlota');
-const dateFilter = document.getElementById('dateFilter');
-const histFilter = document.getElementById('histFilter');
-const historialEl = document.getElementById('historial');
-const btnFollow = document.getElementById('btnFollow');
-const btnPanelToggle = document.getElementById('btnPanelToggle');
+/* -----------------------------
+   PANEL RESPONSIVO
+----------------------------- */
+const sidePanel = document.getElementById('sidePanel');
+document.getElementById('togglePanel').addEventListener('click', ()=> {
+  sidePanel.classList.toggle('hidden');
+});
 
-/* ===========================
-   APP STATE
-   ===========================*/
-let map;
-let marcaMiUbicacion = null;
+/* -----------------------------
+   AGREGAR ESTABLECIMIENTO
+----------------------------- */
+document.getElementById('btnAgregarEst').addEventListener('click', ()=>{
+  showToast('Haz clic en el mapa para agregar un establecimiento');
+  map.once('click', e=>{
+    const name = prompt('Nombre del establecimiento:');
+    if(!name) return;
+    const marker = L.marker(e.latlng, {title:name, draggable:true}).addTo(map);
+    marker.bindPopup(`<b>${name}</b><br><button onclick="editarEst('${name}')">Editar</button> <button onclick="eliminarEst('${name}')">Eliminar</button>`);
+    estMarkers[name] = marker;
+    firebase.set(firebase.ref(db,'establecimientos/'+name), { lat:e.latlng.lat, lon:e.latlng.lng, name });
+  });
+});
+
+/* -----------------------------
+   EDITAR / ELIMINAR ESTABLECIMIENTO
+----------------------------- */
+window.editarEst = (name)=>{
+  const nuevo = prompt('Nuevo nombre para '+name+':');
+  if(!nuevo) return;
+  const dataRef = firebase.ref(db,'establecimientos/'+name);
+  firebase.get(dataRef).then(snap=>{
+    if(snap.exists()){
+      const val = snap.val();
+      firebase.remove(dataRef);
+      firebase.set(firebase.ref(db,'establecimientos/'+nuevo), { ...val, name:nuevo });
+      showToast('Establecimiento renombrado');
+      location.reload();
+    }
+  });
+};
+window.eliminarEst = (name)=>{
+  if(confirm('¿Eliminar establecimiento '+name+'?')){
+    firebase.remove(firebase.ref(db,'establecimientos/'+name));
+    if(estMarkers[name]) map.removeLayer(estMarkers[name]);
+    showToast('Establecimiento eliminado');
+  }
+};
+
+/* -----------------------------
+   VER RUTAS ENTRE PUNTOS
+----------------------------- */
+let puntosRuta = [];
+document.getElementById('btnVerRutas').addEventListener('click', ()=>{
+  showToast('Selecciona 2 puntos en el mapa para ver la ruta');
+  map.on('click', marcarRuta);
+});
+function marcarRuta(e){
+  puntosRuta.push(e.latlng);
+  L.marker(e.latlng).addTo(map);
+  if(puntosRuta.length===2){
+    const route = L.Routing.control({
+      waypoints:[L.latLng(puntosRuta[0]),L.latLng(puntosRuta[1])],
+      routeWhileDragging:false
+    }).addTo(map);
+    rutasActivas.push(route);
+    map.off('click', marcarRuta);
+    showToast('Ruta generada y guardada en Firebase');
+    firebase.push(firebase.ref(db,'rutas'), { from:puntosRuta[0], to:puntosRuta[1], fecha:new Date().toISOString() });
+    puntosRuta = [];
+  }
+}
+
+/* -----------------------------
+   ELIMINAR RUTAS VISUALES
+----------------------------- */
+document.getElementById('btnEliminarRecorrido').addEventListener('click', ()=>{
+  rutasActivas.forEach(r => map.removeControl(r));
+  rutasActivas = [];
+  showToast('Recorridos removidos del mapa (guardados en base de datos)');
+});
+
+/* -----------------------------
+   HISTORIAL DIARIO CON MINI MAPAS
+----------------------------- */
+document.getElementById('btnHistorial').addEventListener('click', cargarHistorial);
+function cargarHistorial(){
+  const cont = document.getElementById('historialContainer');
+  cont.innerHTML = '<h3>Historial de Rutas</h3>';
+  firebase.get(firebase.ref(db,'rutas')).then(snapshot=>{
+    if(!snapshot.exists()){ cont.innerHTML+='No hay rutas registradas'; return; }
+    snapshot.forEach(snap=>{
+      const val = snap.val();
+      const el = document.createElement('div');
+      el.className='mini-map';
+      const info = document.createElement('div');
+      info.className='mini-map-info';
+      info.innerHTML = `Fecha: ${val.fecha}`;
+      cont.appendChild(info);
+      cont.appendChild(el);
+      const m = L.map(el,{attributionControl:false,zoomControl:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);
+      const pts = [ [val.from.lat,val.from.lng],[val.to.lat,val.to.lng] ];
+      L.polyline(pts,{color:'#00bfa5',weight:3}).addTo(m);
+      m.fitBounds(L.latLngBounds(pts),{padding:[10,10]});
+    });
+  });
+}
+
+/* -----------------------------
+   SEGUIMIENTO GPS EN TIEMPO REAL + BACKGROUND SYNC
+----------------------------- */
 let watchId = null;
-let following = false;
-let markers = {};          // marker by flotaId
-let rutas = {};            // polyline list by flotaId
-let establecimientos = {}; // estId -> data
-let flotas = {};           // flotaId -> data
-let geocercas = {};       // geocerca layers
-let routeMode = false;
-let routeBuffer = [];     // two points for route
-let currentRouteControl = null;
-let lastClickLatLng = null;
-let deviceLocalId = localStorage.getItem('gps_device_id') || ('device-'+Math.random().toString(36).slice(2,8));
-
-const fleetColors = ['#2196F3','#4CAF50','#E53935','#FF9800','#9C27B0','#00BCD4','#FFEB3B','#795548'];
-function colorForId(id){ let h=0; for(let i=0;i<id.length;i++) h=(h<<5)-h+id.charCodeAt(i); return fleetColors[Math.abs(h)%fleetColors.length]; }
-
-/* ===========================
-   TOASTS
-   ===========================*/
-function toast(msg, timeout=3500){
-  const el = document.createElement('div');
-  el.className = 'alert';
-  el.textContent = msg;
-  toastContainer.appendChild(el);
-  setTimeout(()=> el.style.opacity='0', timeout-300);
-  setTimeout(()=> { try{ el.remove(); } catch(e){} }, timeout);
-}
-
-/* ===========================
-   LOGIN
-   ===========================*/
-const validUsers = { "Osvaldo":"Grupo04", "Jean Luis":"Grupo04", "Francisco":"Grupo04" };
-btnLogin.addEventListener('click', ()=>{
-  const u = loginUser.value.trim();
-  const p = loginPass.value;
-  if(validUsers[u] && validUsers[u]===p){
-    loginModal.style.display='none';
-    startApp();
-  } else {
-    loginError.style.display='block';
-    setTimeout(()=> loginError.style.display='none', 2500);
-  }
-});
-btnLoginGuest.addEventListener('click', ()=>{
-  loginModal.style.display='none';
-  startApp();
-});
-
-/* ===========================
-   START APP
-   ===========================*/
-function startApp(){
-  mapDiv.style.display = 'block';
-  document.getElementById('statusBar').style.display='flex';
-  if(window.innerWidth <= 900) panel.classList.add('panel-hidden');
-
-  // init map centered on Dominican Republic
-  map = L.map('map').setView([18.7357, -70.1627], 11);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-  // initialize listeners and UI
-  loadEstablecimientos();
-  loadFlotas();
-  listenUbicaciones();    // realtime markers from ubicaciones
-  listenRutasRealtime();  // draws saved rutas
-  listenGeocercasRealtime();
-  setupMapClicks();
-  setupUI();
-  dateFilter.value = (new Date()).toISOString().slice(0,10);
-  refreshHistFilterOptions();
-  renderHistorialForDate(dateFilter.value);
-}
-
-/* ===========================
-   LOAD / LISTEN FUNCTIONS
-   ===========================*/
-function loadEstablecimientos(){
-  db.ref('establecimientos').on('value', snap=>{
-    establecimientos = {};
-    // remove previous layer group
-    if(window._estLayer) try{ map.removeLayer(window._estLayer); } catch(e){}
-    window._estLayer = L.layerGroup().addTo(map);
-    const data = snap.val() || {};
-    Object.keys(data).forEach(id=>{
-      const e = data[id];
-      establecimientos[id] = { id, ...e };
-      const mark = L.marker([e.lat, e.lng], { title: e.nombre, icon: L.divIcon({ className:'est-icon', html:`<div style="background:#fff;padding:6px;border-radius:8px;font-size:14px">🏬</div>` }) })
-        .bindPopup(`<b>${e.nombre}</b><div style="margin-top:6px"><button onclick="zoomToEst('${id}')">Ir</button> <button onclick="selectEstForRoute('${id}')">Usar para ruta</button></div>`);
-      window._estLayer.addLayer(mark);
-    });
-    refreshHistFilterOptions();
-  });
-}
-
-function loadFlotas(){
-  db.ref('flotas').on('value', snap=>{
-    flotas = {};
-    selectFlota.innerHTML = '<option value="">Todas las flotas</option>';
-    flotaList.innerHTML = '';
-    const data = snap.val() || {};
-    Object.keys(data).forEach(id=>{
-      const f = data[id];
-      flotas[id] = { id, ...f };
-      // list
-      const div = document.createElement('div'); div.className='flotaItem';
-      div.innerHTML = `<div>${f.nombre} <div class="small" style="opacity:.7">${f.placa||''}</div></div><div><button class="ghost" onclick="zoomToFlota('${id}')">Ir</button></div>`;
-      div.onclick = ()=> { selectFlota.value = id; renderHistorialForDate(dateFilter.value); };
-      flotaList.appendChild(div);
-      // select
-      const opt = document.createElement('option'); opt.value = id; opt.textContent = f.nombre; selectFlota.appendChild(opt);
-    });
-    refreshHistFilterOptions();
-  });
-}
-
-/* draw saved rutas (collection 'rutas') in realtime */
-function listenRutasRealtime(){
-  db.ref('rutas').on('value', snap=>{
-    // clear
-    Object.values(rutas).forEach(arr=> arr.forEach(poly=> { try{ map.removeLayer(poly); } catch(e){} }));
-    rutas = {};
-    const data = snap.val() || {};
-    Object.keys(data).forEach(key=>{
-      const r = data[key];
-      // r may contain p1,p2,distance,duration
-      if(r && r.polyline && Array.isArray(r.polyline)){
-        const latlngs = r.polyline.map(p=>[p.lat,p.lng]);
-        const poly = L.polyline(latlngs, { color: '#ff6f00', weight:4 }).addTo(map);
-        rutas[key] = rutas[key]||[]; rutas[key].push(poly);
-      } else if (r && r.p1 && r.p2){
-        // draw simple straight line between p1 and p2
-        const latlngs = [[r.p1.lat,r.p1.lng],[r.p2.lat,r.p2.lng]];
-        const poly = L.polyline(latlngs, { color: '#ff6f00', dashArray:'6 4' }).addTo(map);
-        rutas[key] = rutas[key]||[]; rutas[key].push(poly);
-      }
-    });
-  });
-}
-
-/* listen ubicaciones and update markers; also replicate to historial per day */
-function listenUbicaciones(){
-  // structure: ubicaciones/<deviceOrFlotaId>/<YYYY-MM-DD>/<pushId>:{lat,lon,ts}
-  db.ref('ubicaciones').on('value', snap=>{
-    const data = snap.val() || {};
-    Object.keys(data).forEach(deviceId=>{
-      const perDevice = data[deviceId] || {};
-      Object.keys(perDevice).forEach(dateKey=>{
-        const day = perDevice[dateKey];
-        Object.keys(day).forEach(pushId=>{
-          const s = day[pushId];
-          if(!s) return;
-          // update marker for deviceId
-          const lat = s.lat, lon = (s.lon!==undefined? s.lon : s.lng || s.longitude || s.lon);
-          if(lat===undefined || lon===undefined) return;
-          if(markers[deviceId]){
-            try{ markers[deviceId].setLatLng([lat,lon]); }
-            catch(e){}
-          } else {
-            const icon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/1995/1995574.png', iconSize:[34,34] });
-            markers[deviceId] = L.marker([lat,lon], { icon }).addTo(map).bindPopup(`Dispositivo ${deviceId}`);
-          }
-          // replicate to historial: historial/<dateKey>/<deviceId>/<pushId> (if not exists)
-          const histRef = db.ref(`historial/${dateKey}/${deviceId}/${pushId}`);
-          histRef.once('value', snapHist=>{
-            if(!snapHist.exists()){
-              histRef.set({ lat, lon, ts: s.ts || s.timestamp || Date.now() }).catch(()=>{});
-            }
-          });
-        });
-      });
-    });
-    // re-render historial for current date selection
-    renderHistorialForDate(dateFilter.value || (new Date()).toISOString().slice(0,10));
-  });
-}
-
-/* geocercas list and detection: geocercas/<id>:{nombre,lat,lng,radio} */
-function listenGeocercasRealtime(){
-  db.ref('geocercas').on('value', snap=>{
-    // clear layers
-    Object.values(geocercas).forEach(c=> { try{ map.removeLayer(c); } catch(e){} });
-    geocercas = {};
-    const data = snap.val() || {};
-    Object.keys(data).forEach(id=>{
-      const g = data[id];
-      const circle = L.circle([g.lat,g.lng], { radius: g.radio || 200, color:'#ff9800', fillColor:'#ff9800', fillOpacity:0.12 }).addTo(map).bindPopup(`<b>${g.nombre||id}</b>`);
-      geocercas[id] = { id, data:g, layer: circle, devicesInside: {} };
-    });
-  });
-
-  // run simple geocerca checks on each ubicacion change
-  db.ref('ubicaciones').on('child_changed', snap=>{
-    // when any device subtree changes, check its latest position for geocercas
-    checkAllDevicesAgainstGeocercas();
-  });
-  db.ref('ubicaciones').on('child_added', snap=>{
-    checkAllDevicesAgainstGeocercas();
-  });
-}
-
-/* check device latest pos against geocercas and fire toast on enter/exit */
-function checkAllDevicesAgainstGeocercas(){
-  db.ref('ubicaciones').once('value').then(snapshot=>{
-    const all = snapshot.val() || {};
-    Object.keys(all).forEach(deviceId=>{
-      const perDevice = all[deviceId] || {};
-      // try today's date first
-      const today = (new Date()).toISOString().slice(0,10);
-      let day = perDevice[today];
-      if(!day){
-        // try flatten
-        const firstKey = Object.keys(perDevice)[0];
-        day = perDevice[firstKey];
-      }
-      if(!day) return;
-      // get last sample by timestamp
-      let last = null;
-      Object.values(day).forEach(p=>{
-        if(!p) return;
-        if(!last || (p.ts||p.timestamp||0) > (last.ts||last.timestamp||0)) last = p;
-      });
-      if(!last) return;
-      const lat = last.lat, lon = last.lon || last.lng;
-      if(lat===undefined || lon===undefined) return;
-      // check each geocerca
-      Object.keys(geocercas).forEach(gid=>{
-        const g = geocercas[gid];
-        const d = map.distance([lat,lon],[g.data.lat,g.data.lng]);
-        const inside = d <= (g.data.radio || 200);
-        const prev = g.devicesInside[deviceId] || false;
-        if(inside && !prev){
-          g.devicesInside[deviceId] = true;
-          toast(`🔔 ${deviceId} ENTRÓ a geocerca ${g.data.nombre||gid}`);
-          // log event
-          db.ref('events').push({ deviceId, type:'entry', geocerca: g.data.nombre||gid, ts: Date.now() });
-        } else if(!inside && prev){
-          g.devicesInside[deviceId] = false;
-          toast(`🔔 ${deviceId} SALIÓ de geocerca ${g.data.nombre||gid}`);
-          db.ref('events').push({ deviceId, type:'exit', geocerca: g.data.nombre||gid, ts: Date.now() });
-        }
-      });
-    });
-  }).catch(()=>{});
-}
-
-/* ===========================
-   MAP CLICK / ADD PLACE / ROUTING
-   ===========================*/
-function setupMapClicks(){
-  map.on('click', (e)=>{
-    if(routeMode){
-      routeBuffer.push([e.latlng.lat, e.latlng.lng]);
-      const m = L.circleMarker(e.latlng, { radius:6, fillColor:'#fff', fillOpacity:0.9, color:'#0a84ff' }).addTo(map);
-      if(routeBuffer.length===2){
-        computeRoute(routeBuffer[0], routeBuffer[1], true);
-        routeMode = false; routeBuffer = [];
-      } else {
-        toast('Punto 1 marcado. Marca el segundo punto.');
-      }
-      return;
-    }
-    // otherwise open place modal to add establishment or flota
-    lastClickLatLng = e.latlng;
-    openPlaceModal('establecimiento', e.latlng);
-  });
-}
-
-/* open add-place modal (type 'establecimiento' or 'flota') */
-function openPlaceModal(type, latlng){
-  placeModal.style.display = 'flex';
-  placeTitle.textContent = (type==='flota') ? 'Agregar nueva flota' : 'Agregar establecimiento';
-  placeInputName.value = '';
-  placeModal.dataset.type = type;
-  placeModal.dataset.lat = latlng.lat;
-  placeModal.dataset.lng = latlng.lng;
-}
-
-/* place modal handlers */
-placeSave.addEventListener('click', ()=>{
-  const name = placeInputName.value.trim();
-  if(!name) { toast('Escribe un nombre'); return; }
-  const lat = parseFloat(placeModal.dataset.lat), lng = parseFloat(placeModal.dataset.lng);
-  const type = placeModal.dataset.type || 'establecimiento';
-  if(type==='flota'){
-    // create flota and initial ubicacion under ubicaciones/<flotaId>/<date>/<ts>
-    const id = db.ref('flotas').push().key;
-    const data = { nombre: name, placa: '' };
-    const date = (new Date()).toISOString().slice(0,10);
-    const ts = Date.now();
-    const updates = {};
-    updates[`/flotas/${id}`] = data;
-    updates[`/ubicaciones/${id}/${date}/${ts}`] = { lat, lon: lng, ts };
-    db.ref().update(updates).then(()=> {
-      toast('Flota creada y ubicación inicial guardada');
-      placeModal.style.display='none';
-      refreshHistFilterOptions();
-    }).catch(err=> toast('Error: '+err.message));
-  } else {
-    // add establecimiento
-    const id = db.ref('establecimientos').push().key;
-    db.ref('establecimientos/'+id).set({ nombre: name, lat, lng, createdAt: Date.now() }).then(()=>{
-      toast('Establecimiento guardado');
-      placeModal.style.display='none';
-      refreshHistFilterOptions();
-    }).catch(err=> toast('Error: '+err.message));
-  }
-});
-placeCancel.addEventListener('click', ()=> { placeModal.style.display='none'; });
-placeAsFlota.addEventListener('click', ()=> {
-  // convert modal into flota type (keeps latlng)
-  placeModal.dataset.type = 'flota';
-  placeTitle.textContent = 'Agregar nueva flota';
-});
-
-/* btnAgregarPunto instruction */
-btnAgregarPunto.addEventListener('click', ()=> {
-  toast('Toca en el mapa donde deseas agregar el establecimiento o flota.'); 
-});
-
-/* ROUTE: btnRuta toggles route mode */
-btnRuta.addEventListener('click', ()=> {
-  routeMode = true; routeBuffer = []; toast('Modo rutas: marca dos puntos en el mapa o usa "Usar para ruta" en un establecimiento.');
-});
-
-/* selecting an establishment for route (exposed to popup buttons) */
-window.selectEstForRoute = function(estId){
-  const e = establecimientos[estId];
-  if(!e) return;
-  routeBuffer.push([e.lat, e.lng]);
-  toast(`Añadido punto: ${e.nombre}`);
-  if(routeBuffer.length===2){
-    computeRoute(routeBuffer[0], routeBuffer[1], true);
-    routeMode=false; routeBuffer=[];
-  }
-};
-
-/* compute route using Leaflet Routing Machine (OSRM) and optionally save to Firebase */
-function computeRoute(p1, p2, save){
-  // remove previous control if exists
-  if(currentRouteControl){ try{ map.removeControl(currentRouteControl); } catch(e){} currentRouteControl = null; }
-  currentRouteControl = L.Routing.control({
-    waypoints: [L.latLng(p1[0],p1[1]), L.latLng(p2[0],p2[1])],
-    router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-    show:false,
-    addWaypoints:false,
-    routeWhileDragging:false,
-    createMarker: function() { return null; }
-  }).addTo(map);
-
-  currentRouteControl.on('routesfound', function(e){
-    const route = e.routes[0];
-    const distance = route.summary.totalDistance || route.summary.total_distance || 0; // meters
-    const duration = route.summary.totalTime || route.summary.total_time || 0; // seconds
-    const km = (distance/1000).toFixed(2);
-    const min = Math.round(duration/60);
-    toast(`Ruta: ${km} km — aprox ${min} min`);
-    // draw polyline explicitly and save polyline points
-    const coords = route.coordinates.map(c=>({ lat: c.lat, lng: c.lng }));
-    L.polyline(coords, { color:'#00bfa5', weight:4 }).addTo(map);
-    if(save){
-      // save route info to firebase: rutas/<pushId>
-      const id = db.ref('rutas').push().key;
-      db.ref('rutas/'+id).set({ p1:{lat:p1[0],lng:p1[1]}, p2:{lat:p2[0],lng:p2[1]}, polyline: coords, distanceMeters: distance, durationSec: duration, createdAt: Date.now() })
-        .then(()=> toast('Ruta guardada en Firebase'))
-        .catch(err=> toast('Error guardando ruta: '+err.message));
-    }
-  });
-}
-
-/* zoom helpers */
-window.zoomToEst = function(estId){
-  const e = establecimientos[estId];
-  if(!e) return;
-  map.setView([e.lat,e.lng],15);
-  L.popup().setLatLng([e.lat,e.lng]).setContent(`<b>${e.nombre}</b><div style="margin-top:6px"><button onclick="selectEstForRoute('${estId}')">Usar para ruta</button></div>`).openOn(map);
-};
-window.zoomToFlota = function(flotaId){
-  if(markers[flotaId]) map.setView(markers[flotaId].getLatLng(),14);
-  else toast('No hay datos de ubicación para esa flota aún');
-};
-
-/* ===========================
-   HISTORIAL: render mini-maps per flota per day
-   ===========================*/
-async function renderHistorialForDate(dateStr){
-  historialEl.innerHTML = '';
-  const date = dateStr || (new Date()).toISOString().slice(0,10);
-  // fetch historial/<date>
-  const snap = await db.ref('historial/'+date).once('value');
-  const data = snap.val() || {};
-  // data: { flotaId: { pushId: {lat,lon,ts,establecimiento?} } }
-  // build summaries per flota
-  const summaries = [];
-  Object.keys(data).forEach(flotaId=>{
-    const pts = [];
-    Object.values(data[flotaId]).forEach(p=>{
-      if(p && p.lat!==undefined && p.lon!==undefined) pts.push({ lat: p.lat, lon: p.lon, ts: p.ts || p.timestamp || 0, est: p.establecimiento || p.est });
-    });
-    if(pts.length===0) return;
-    pts.sort((a,b)=> (a.ts||0)-(b.ts||0));
-    // compute totals
-    let totalDist = 0, movingSec = 0, stoppedSec = 0;
-    for(let i=1;i<pts.length;i++){
-      const a = pts[i-1], b = pts[i];
-      const d = map.distance([a.lat,a.lon],[b.lat,b.lon]);
-      totalDist += d;
-      const dt = (b.ts - a.ts)/1000;
-      if(d >= 5) movingSec += dt; else stoppedSec += dt;
-    }
-    summaries.push({ flotaId, pts, totalDist, movingSec, stoppedSec });
-  });
-  // optionally filter by histFilter or selected flota
-  const filterVal = histFilter.value || 'all';
-  const selectedFlota = selectFlota.value || '';
-  summaries.sort((a,b)=> b.pts.length - a.pts.length);
-  summaries.forEach(s=>{
-    if(filterVal !== 'all' && filterVal !== s.flotaId && !(establecimientos[filterVal])) return; // skip if filter applies to specific flotaId
-    if(selectedFlota && s.flotaId !== selectedFlota) return;
-    // render
-    const container = document.createElement('div');
-    container.style.display='flex'; container.style.gap='8px'; container.style.alignItems='center'; container.style.padding='10px'; container.style.borderBottom='1px solid rgba(255,255,255,0.02)';
-    const mini = document.createElement('div'); mini.className='mini-map'; const miniId = 'mini-'+s.flotaId+'-'+date; mini.id = miniId;
-    const info = document.createElement('div'); info.style.flex='1';
-    const title = document.createElement('div'); title.innerHTML = `<b>${flotas[s.flotaId] ? flotas[s.flotaId].nombre : s.flotaId}</b> <span class="small" style="opacity:.7">(${s.pts.length} pts)</span>`;
-    const km = (s.totalDist/1000).toFixed(2);
-    const moveMin = Math.round(s.movingSec/60), stopMin = Math.round(s.stoppedSec/60);
-    const stats = document.createElement('div'); stats.className='small'; stats.innerHTML = `Distancia: <span class="badge">${km} km</span> • Movimiento: <span class="badge">${moveMin} min</span> • Parado: <span class="badge">${stopMin} min</span>`;
-    const actions = document.createElement('div'); actions.style.marginTop='6px';
-    const btnOpen = document.createElement('button'); btnOpen.className='ghost'; btnOpen.textContent='Abrir ruta'; btnOpen.onclick = ()=> { openFullRoute(s.pts, s.flotaId); };
-    actions.appendChild(btnOpen);
-    info.appendChild(title); info.appendChild(stats); info.appendChild(actions);
-    container.appendChild(mini); container.appendChild(info);
-    historialEl.appendChild(container);
-    // create mini-map
-    setTimeout(()=> {
-      try{
-        const m = L.map(miniId, { attributionControl:false, zoomControl:false, dragging:false, scrollWheelZoom:false }).setView([s.pts[0].lat, s.pts[0].lon], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);
-        const latlngs = s.pts.map(p=>[p.lat,p.lon]);
-        L.polyline(latlngs, { color: colorForId(s.flotaId), weight:3 }).addTo(m);
-        L.circleMarker(latlngs[0], { radius:4, fillColor:'#0f0', color:'#fff' }).addTo(m);
-        L.circleMarker(latlngs[latlngs.length-1], { radius:4, fillColor:'#f00', color:'#fff' }).addTo(m);
-        m.fitBounds(latlngs, { padding:[6,6] });
-      }catch(err){ console.error('mini map err',err); }
-    }, 80);
-  });
-}
-
-/* open full map with polyline (fits map to polyline) */
-function openFullRoute(points, flotaId){
-  if(!points || points.length===0) return;
-  if(rutas['temp']) { rutas['temp'].forEach(p=> { try{ map.removeLayer(p); } catch(e){} }); }
-  rutas['temp'] = rutas['temp'] || [];
-  const ll = points.map(p=>[p.lat,p.lon]);
-  const poly = L.polyline(ll, { color: colorForId(flotaId), weight:4 }).addTo(map);
-  rutas['temp'].push(poly);
-  map.fitBounds(poly.getBounds(), { padding:[40,40] });
-}
-
-/* refresh histFilter options (flotas + establecimientos) */
-function refreshHistFilterOptions(){
-  histFilter.innerHTML = '<option value="all">Todas</option>';
-  Object.keys(flotas).forEach(k=>{
-    const opt = document.createElement('option'); opt.value = k; opt.textContent = flotas[k].nombre; histFilter.appendChild(opt);
-  });
-  Object.keys(establecimientos).forEach(k=>{
-    const opt = document.createElement('option'); opt.value = k; opt.textContent = establecimientos[k].nombre; histFilter.appendChild(opt);
-  });
-}
-
-/* date and filter events */
-dateFilter.addEventListener('change', ()=> renderHistorialForDate(dateFilter.value));
-histFilter.addEventListener('change', ()=> renderHistorialForDate(dateFilter.value));
-selectFlota.addEventListener('change', ()=> renderHistorialForDate(dateFilter.value));
-
-/* search */
-btnBuscar.addEventListener('click', ()=>{
-  const q = inputBuscar.value.trim().toLowerCase();
-  if(!q) return;
-  let found=false;
-  Object.keys(flotas).forEach(k=>{
-    if(flotas[k].nombre && flotas[k].nombre.toLowerCase().includes(q)){ zoomToFlota(k); found=true; }
-  });
-  Object.keys(establecimientos).forEach(k=>{
-    if(establecimientos[k].nombre && establecimientos[k].nombre.toLowerCase().includes(q)){ zoomToEst(k); found=true; }
-  });
-  if(!found) toast('No se encontró');
-});
-
-/* follow (continuous watch) */
-btnFollow.addEventListener('click', ()=>{
-  if(following){
-    if(watchId) navigator.geolocation.clearWatch(watchId);
-    following=false; toast('Seguimiento detenido');
-  } else {
-    if(!navigator.geolocation){ toast('Geolocalización no soportada'); return; }
-    watchId = navigator.geolocation.watchPosition(pos=>{
-      const lat = pos.coords.latitude, lon = pos.coords.longitude;
-      const ts = Date.now();
-      // show marker
-      if(marcaMiUbicacion) marcaMiUbicacion.setLatLng([lat,lon]);
-      else marcaMiUbicacion = L.marker([lat,lon], { icon: L.divIcon({ html:'<div style="background:#1e88e5;width:14px;height:14px;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>'}) }).addTo(map);
-      if(window.innerWidth <= 900) map.setView([lat,lon],16);
-      // store under ubicaciones/<deviceLocalId>/<date>/<ts>
-      const date = (new Date(ts)).toISOString().slice(0,10);
-      const key = ts;
-      db.ref(`ubicaciones/${deviceLocalId}/${date}/${key}`).set({ lat, lon, ts }).catch(()=>{});
-    }, err=> toast('Error geolocalización: '+err.message), { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
-    following=true; toast('Seguimiento activado');
+document.getElementById('btnStartTracking').addEventListener('click', ()=>{
+  if(!navigator.geolocation){ alert('Geolocalización no soportada'); return; }
+  showToast('Activando seguimiento GPS...');
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    const {latitude, longitude} = pos.coords;
+    const now = new Date().toISOString();
+    firebase.push(firebase.ref(db,'tracking'), {lat:latitude, lon:longitude, fecha:now});
+  }, err=> console.error(err), {enableHighAccuracy:true, maximumAge:0, timeout:10000});
+  if('serviceWorker' in navigator && 'SyncManager' in window){
+    navigator.serviceWorker.ready.then(reg=> reg.sync.register('track-location'));
   }
 });
 
-/* utility to set initial date */
-(function(){ dateFilter.value = (new Date()).toISOString().slice(0,10); })();
-
-/* expose some helpers for popup buttons */
-window.selectEstForRoute = window.selectEstForRoute || function(id){ };
-window.zoomToEst = window.zoomToEst || function(id){};
-window.zoomToFlota = window.zoomToFlota || function(id){};
-
-/* END of script */
+/* -----------------------------
+   REGISTRO SERVICE WORKER
+----------------------------- */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(()=> console.log('Service Worker activo'));
+}
 </script>
 </body>
 </html>
