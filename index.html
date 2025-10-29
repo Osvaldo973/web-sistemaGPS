@@ -10,16 +10,16 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js"></script>
-
-<!-- Manifest -->
-<link rel="manifest" href="manifest.json" />
+<!-- Firebase compat -->
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database-compat.js"></script>
 
 <style>
+/* --- Basic styles --- */
 body,html { margin:0; padding:0; height:100%; background:#0f0f0f; color:#fff; font-family:Arial, sans-serif; }
 #map { height:100%; width:100%; }
+
+/* Panel */
 .panel { position:absolute; top:0; left:0; background:#151515; width:320px; height:100%; overflow:auto; padding:15px; box-shadow:2px 0 10px rgba(0,0,0,0.6); z-index:1000; transition:transform .3s ease; }
 .panel.hidden { transform:translateX(-100%); }
 .panel h2 { margin-top:0; color:#00bfa5; }
@@ -28,15 +28,42 @@ body,html { margin:0; padding:0; height:100%; background:#0f0f0f; color:#fff; fo
 #togglePanel { position:absolute; top:10px; left:10px; z-index:1100; background:#00bfa5; border:none; color:#fff; padding:8px 10px; border-radius:5px; cursor:pointer; }
 #toast { position:fixed; bottom:25px; left:50%; transform:translateX(-50%); background:#323232; color:#fff; padding:10px 20px; border-radius:6px; opacity:0; transition:opacity .4s; z-index:2000; }
 #toast.show { opacity:1; }
-.historial-container { margin-top:15px; }
-.mini-map { width:100%; height:120px; margin:6px 0; border:1px solid #333; border-radius:8px; }
-.mini-map-info { font-size:12px; color:#ccc; margin-bottom:10px; }
+
+/* Login modal */
+#loginModal {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.85);
+  display:flex; align-items:center; justify-content:center;
+  z-index:3000;
+}
+.login-box {
+  background:#1c1c1c; padding:30px; border-radius:10px; box-shadow:0 0 10px #00bfa5; width:320px; text-align:center;
+}
+.login-box h2 { color:#00bfa5; margin-bottom:16px; }
+.login-box input {
+  width:100%; padding:10px; margin:8px 0; border:none; border-radius:6px; background:#2a2a2a; color:#fff;
+}
+.login-box button {
+  width:100%; padding:10px; border:none; border-radius:6px; background:#00bfa5; color:#fff; font-weight:bold; cursor:pointer;
+}
+.login-box .note { margin-top:8px; font-size:13px; color:#cfeff1; opacity:0.9; }
 @media(max-width:768px){ .panel{width:85%;} }
 </style>
 </head>
 
 <body>
 <button id="togglePanel">☰</button>
+
+<!-- LOGIN MODAL -->
+<div id="loginModal">
+  <div class="login-box">
+    <h2>Iniciar Sesión</h2>
+    <input id="loginUser" type="text" placeholder="Usuario (p.ej. Osvaldo)">
+    <input id="loginPass" type="password" placeholder="Contraseña (Grupo04)">
+    <button id="btnLogin">Entrar</button>
+    <div class="note">Usuarios válidos: <strong>Osvaldo</strong>, <strong>Francisco</strong>, <strong>Jean Luis</strong> — Contraseña: <strong>Grupo04</strong></div>
+  </div>
+</div>
 
 <!-- PANEL -->
 <div class="panel hidden" id="sidePanel">
@@ -46,17 +73,17 @@ body,html { margin:0; padding:0; height:100%; background:#0f0f0f; color:#fff; fo
   <button class="btn" id="btnHistorial">Historial</button>
   <button class="btn" id="btnEliminarRecorrido">Eliminar Recorrido del Mapa</button>
   <button class="btn" id="btnStartTracking">Activar Seguimiento GPS</button>
-  <div class="historial-container" id="historialContainer"></div>
+  <div id="historialContainer"></div>
 </div>
 
-<!-- MAPA -->
+<!-- MAP -->
 <div id="map"></div>
 <div id="toast"></div>
 
 <script>
 /* -----------------------------
-   CONFIGURACIÓN FIREBASE
------------------------------ */
+   FIREBASE (compat) INIT
+-----------------------------*/
 const firebaseConfig = {
   apiKey: "AIzaSyBNDvalpKia91Sx8LpOf9KYRwrLmYKjjx8",
   authDomain: "system-gps-ccn.firebaseapp.com",
@@ -66,159 +93,225 @@ const firebaseConfig = {
   messagingSenderId: "490798984373",
   appId: "1:490798984373:web:fc9e47dc8ddac1a79fdc16"
 };
-const app = firebase.initializeApp(firebaseConfig);
-const db = firebase.getDatabase(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
 /* -----------------------------
-   MAPA
------------------------------ */
-const map = L.map('map').setView([18.7357, -70.1627], 8);
+   LOGIN (usuarios solicitados)
+-----------------------------*/
+const validUsers = {
+  "Osvaldo": "Grupo04",
+  "Francisco": "Grupo04",
+  "Jean Luis": "Grupo04"
+};
+
+const loginModal = document.getElementById('loginModal');
+const loginUser = document.getElementById('loginUser');
+const loginPass = document.getElementById('loginPass');
+const btnLogin = document.getElementById('btnLogin');
+const sidePanel = document.getElementById('sidePanel');
+
+function showToast(msg, t=3000){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=> el.classList.remove('show'), t);
+}
+
+function doLogin(){
+  const u = loginUser.value.trim();
+  const p = loginPass.value;
+  if(validUsers[u] && validUsers[u] === p){
+    // successful
+    loginModal.style.display = 'none';
+    // show panel by default (desktop and mobile)
+    sidePanel.classList.remove('hidden');
+    showToast(`Bienvenido, ${u}`);
+    // initialize app features that require login (if any)
+    // e.g., start realtime listeners (optional)
+  } else {
+    alert('Usuario o contraseña incorrectos');
+  }
+}
+btnLogin.addEventListener('click', doLogin);
+// Enter key support
+loginPass.addEventListener('keyup', (e)=> { if(e.key === 'Enter') doLogin(); });
+loginUser.addEventListener('keyup', (e)=> { if(e.key === 'Enter') loginPass.focus(); });
+
+/* -----------------------------
+   MAPA (centrado en RD)
+-----------------------------*/
+const map = L.map('map').setView([18.7357, -70.1627], 10);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let estMarkers = {};
 let rutasActivas = [];
 
 /* -----------------------------
-   TOAST
------------------------------ */
-function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(()=> t.classList.remove('show'), 3000);
-}
-
-/* -----------------------------
-   PANEL RESPONSIVO
------------------------------ */
-const sidePanel = document.getElementById('sidePanel');
+   PANEL TOGGLE
+-----------------------------*/
 document.getElementById('togglePanel').addEventListener('click', ()=> {
   sidePanel.classList.toggle('hidden');
 });
 
 /* -----------------------------
-   AGREGAR ESTABLECIMIENTO
------------------------------ */
+   AGREGAR ESTABLECIMIENTO (click en mapa)
+-----------------------------*/
 document.getElementById('btnAgregarEst').addEventListener('click', ()=>{
-  showToast('Haz clic en el mapa para agregar un establecimiento');
+  showToast('Toca en el mapa para agregar un establecimiento');
   map.once('click', e=>{
-    const name = prompt('Nombre del establecimiento:');
-    if(!name) return;
-    const marker = L.marker(e.latlng, {title:name, draggable:true}).addTo(map);
-    marker.bindPopup(`<b>${name}</b><br><button onclick="editarEst('${name}')">Editar</button> <button onclick="eliminarEst('${name}')">Eliminar</button>`);
-    estMarkers[name] = marker;
-    firebase.set(firebase.ref(db,'establecimientos/'+name), { lat:e.latlng.lat, lon:e.latlng.lng, name });
+    const nombre = prompt('Nombre del establecimiento (Cancelar para abortar):');
+    if(!nombre) return;
+    const marker = L.marker(e.latlng, { title: nombre, draggable: true }).addTo(map);
+    marker.bindPopup(`<b>${escapeHtml(nombre)}</b><br><button onclick="editarEst('${escapeJS(nombre)}')">Editar</button> <button onclick="eliminarEst('${escapeJS(nombre)}')">Eliminar</button>`);
+    estMarkers[nombre] = marker;
+    // save to firebase
+    db.ref('establecimientos/'+nombre).set({ nombre, lat: e.latlng.lat, lng: e.latlng.lng, createdAt: Date.now() })
+      .then(()=> showToast('Establecimiento guardado'))
+      .catch(()=> showToast('Error guardando establecimiento'));
   });
 });
 
 /* -----------------------------
-   EDITAR / ELIMINAR ESTABLECIMIENTO
------------------------------ */
-window.editarEst = (name)=>{
-  const nuevo = prompt('Nuevo nombre para '+name+':');
-  if(!nuevo) return;
-  const dataRef = firebase.ref(db,'establecimientos/'+name);
-  firebase.get(dataRef).then(snap=>{
-    if(snap.exists()){
-      const val = snap.val();
-      firebase.remove(dataRef);
-      firebase.set(firebase.ref(db,'establecimientos/'+nuevo), { ...val, name:nuevo });
-      showToast('Establecimiento renombrado');
-      location.reload();
-    }
+   EDITAR / ELIMINAR (global functions used by popup buttons)
+-----------------------------*/
+window.editarEst = function(name){
+  const nuevo = prompt('Nuevo nombre para el establecimiento:', name);
+  if(nuevo === null) return;
+  const refOld = db.ref('establecimientos/'+name);
+  refOld.once('value').then(snap=>{
+    if(!snap.exists()) return showToast('No encontrado');
+    const val = snap.val();
+    // write under new key then remove old
+    db.ref('establecimientos/'+nuevo).set({...val, nombre:nuevo}).then(()=>{
+      refOld.remove();
+      if(estMarkers[name]) {
+        const latlng = estMarkers[name].getLatLng();
+        map.removeLayer(estMarkers[name]);
+        const m = L.marker(latlng, { title: nuevo, draggable:true }).addTo(map);
+        m.bindPopup(`<b>${escapeHtml(nuevo)}</b><br><button onclick="editarEst('${escapeJS(nuevo)}')">Editar</button> <button onclick="eliminarEst('${escapeJS(nuevo)}')">Eliminar</button>`);
+        estMarkers[nuevo] = m;
+        delete estMarkers[name];
+      }
+      showToast('Establecimiento actualizado');
+    });
   });
 };
-window.eliminarEst = (name)=>{
-  if(confirm('¿Eliminar establecimiento '+name+'?')){
-    firebase.remove(firebase.ref(db,'establecimientos/'+name));
+
+window.eliminarEst = function(name){
+  if(!confirm('¿Eliminar establecimiento "'+name+'"?')) return;
+  db.ref('establecimientos/'+name).remove().then(()=>{
     if(estMarkers[name]) map.removeLayer(estMarkers[name]);
+    delete estMarkers[name];
     showToast('Establecimiento eliminado');
-  }
+  }).catch(()=> showToast('Error al eliminar'));
 };
 
 /* -----------------------------
-   VER RUTAS ENTRE PUNTOS
------------------------------ */
+   VER RUTAS (marcar 2 puntos)
+-----------------------------*/
 let puntosRuta = [];
 document.getElementById('btnVerRutas').addEventListener('click', ()=>{
-  showToast('Selecciona 2 puntos en el mapa para ver la ruta');
+  showToast('Marca dos puntos en el mapa para calcular ruta');
   map.on('click', marcarRuta);
 });
 function marcarRuta(e){
   puntosRuta.push(e.latlng);
-  L.marker(e.latlng).addTo(map);
-  if(puntosRuta.length===2){
-    const route = L.Routing.control({
-      waypoints:[L.latLng(puntosRuta[0]),L.latLng(puntosRuta[1])],
-      routeWhileDragging:false
+  L.circleMarker(e.latlng, { radius:6, color:'#fff', fillColor:'#00bfa5', fillOpacity:0.9 }).addTo(map);
+  if(puntosRuta.length === 2){
+    const rcontrol = L.Routing.control({
+      waypoints: [L.latLng(puntosRuta[0]), L.latLng(puntosRuta[1])],
+      routeWhileDragging:false,
+      show:false,
+      createMarker: ()=>null
     }).addTo(map);
-    rutasActivas.push(route);
+    rutasActivas.push(rcontrol);
     map.off('click', marcarRuta);
-    showToast('Ruta generada y guardada en Firebase');
-    firebase.push(firebase.ref(db,'rutas'), { from:puntosRuta[0], to:puntosRuta[1], fecha:new Date().toISOString() });
+    // save route to firebase
+    const coords = puntosRuta.map(p=>({ lat:p.lat, lng:p.lng }));
+    const id = db.ref('rutas').push().key;
+    db.ref('rutas/'+id).set({ p1:coords[0], p2:coords[1], createdAt: Date.now() }).then(()=> showToast('Ruta guardada'));
     puntosRuta = [];
   }
 }
 
 /* -----------------------------
-   ELIMINAR RUTAS VISUALES
------------------------------ */
+   ELIMINAR RUTAS VISIBLES
+-----------------------------*/
 document.getElementById('btnEliminarRecorrido').addEventListener('click', ()=>{
-  rutasActivas.forEach(r => map.removeControl(r));
+  rutasActivas.forEach(rc => {
+    try{ map.removeControl(rc); } catch(e){}
+  });
   rutasActivas = [];
-  showToast('Recorridos removidos del mapa (guardados en base de datos)');
+  showToast('Rutas visibles eliminadas (los datos permanecen en Firebase)');
 });
 
 /* -----------------------------
-   HISTORIAL DIARIO CON MINI MAPAS
------------------------------ */
+   HISTORIAL (mini-mapas)
+-----------------------------*/
 document.getElementById('btnHistorial').addEventListener('click', cargarHistorial);
 function cargarHistorial(){
   const cont = document.getElementById('historialContainer');
-  cont.innerHTML = '<h3>Historial de Rutas</h3>';
-  firebase.get(firebase.ref(db,'rutas')).then(snapshot=>{
-    if(!snapshot.exists()){ cont.innerHTML+='No hay rutas registradas'; return; }
-    snapshot.forEach(snap=>{
-      const val = snap.val();
-      const el = document.createElement('div');
-      el.className='mini-map';
-      const info = document.createElement('div');
-      info.className='mini-map-info';
-      info.innerHTML = `Fecha: ${val.fecha}`;
-      cont.appendChild(info);
-      cont.appendChild(el);
-      const m = L.map(el,{attributionControl:false,zoomControl:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);
-      const pts = [ [val.from.lat,val.from.lng],[val.to.lat,val.to.lng] ];
-      L.polyline(pts,{color:'#00bfa5',weight:3}).addTo(m);
-      m.fitBounds(L.latLngBounds(pts),{padding:[10,10]});
+  cont.innerHTML = '<h3>Historial</h3>';
+  db.ref('rutas').once('value').then(snap=>{
+    const val = snap.val() || {};
+    Object.keys(val).forEach(k=>{
+      const r = val[k];
+      const box = document.createElement('div');
+      box.style.marginBottom = '12px';
+      box.innerHTML = `<div style="font-size:13px;margin-bottom:6px">Ruta ID: ${k} • ${new Date(r.createdAt||Date.now()).toLocaleString()}</div><div style="width:100%;height:120px;border:1px solid #333;border-radius:6px" id="mini-${k}"></div>`;
+      cont.appendChild(box);
+      // create mini map
+      setTimeout(()=>{
+        try{
+          const mm = L.map('mini-'+k, { attributionControl:false, zoomControl:false }).setView([18.7357,-70.1627], 10);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mm);
+          const latlngs = [ [r.p1.lat, r.p1.lng], [r.p2.lat, r.p2.lng] ];
+          L.polyline(latlngs, { color:'#00bfa5', weight:3 }).addTo(mm);
+          mm.fitBounds(latlngs, { padding:[8,8] });
+        } catch(err){ console.warn('mini map failed', err); }
+      }, 120);
     });
+    if(Object.keys(val).length === 0) cont.innerHTML += '<div>No hay rutas guardadas.</div>';
   });
 }
 
 /* -----------------------------
-   SEGUIMIENTO GPS EN TIEMPO REAL + BACKGROUND SYNC
------------------------------ */
-let watchId = null;
+   SEGUIMIENTO EN TIEMPO REAL
+-----------------------------*/
 document.getElementById('btnStartTracking').addEventListener('click', ()=>{
-  if(!navigator.geolocation){ alert('Geolocalización no soportada'); return; }
-  showToast('Activando seguimiento GPS...');
-  watchId = navigator.geolocation.watchPosition(pos=>{
-    const {latitude, longitude} = pos.coords;
-    const now = new Date().toISOString();
-    firebase.push(firebase.ref(db,'tracking'), {lat:latitude, lon:longitude, fecha:now});
-  }, err=> console.error(err), {enableHighAccuracy:true, maximumAge:0, timeout:10000});
-  if('serviceWorker' in navigator && 'SyncManager' in window){
-    navigator.serviceWorker.ready.then(reg=> reg.sync.register('track-location'));
-  }
+  if(!('geolocation' in navigator)){ alert('Geolocalización no soportada en este navegador'); return; }
+  showToast('Iniciando seguimiento (se guardará en Firebase)');
+  navigator.geolocation.watchPosition(pos=>{
+    const lat = pos.coords.latitude, lng = pos.coords.longitude, ts = Date.now();
+    db.ref('ubicaciones/'+ts).set({ lat, lng, ts }).catch(()=> {});
+  }, err=> { console.error(err); showToast('Error geolocalización: '+(err.message||err.code)); }, { enableHighAccuracy:true, maximumAge:2000 });
 });
 
 /* -----------------------------
-   REGISTRO SERVICE WORKER
------------------------------ */
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').then(()=> console.log('Service Worker activo'));
-}
+   UTILIDADES
+-----------------------------*/
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeJS(s){ return String(s||'').replace(/'/g,"\\'"); }
+
+/* -----------------------------
+   CARGAR ESTABLECIMIENTOS EXISTENTES (mostrar en mapa)
+-----------------------------*/
+db.ref('establecimientos').on('value', snap=>{
+  const data = snap.val() || {};
+  // remove old markers
+  Object.values(estMarkers).forEach(m=> { try{ map.removeLayer(m); } catch(e){} });
+  estMarkers = {};
+  Object.keys(data).forEach(k=>{
+    const it = data[k];
+    try{
+      const m = L.marker([it.lat, it.lng], { title: it.nombre || k }).addTo(map);
+      m.bindPopup(`<b>${escapeHtml(it.nombre||k)}</b><br><button onclick="editarEst('${escapeJS(k)}')">Editar</button> <button onclick="eliminarEst('${escapeJS(k)}')">Eliminar</button>`);
+      estMarkers[k] = m;
+    }catch(e){}
+  });
+});
+
 </script>
 </body>
 </html>
